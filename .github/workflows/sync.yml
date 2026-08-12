@@ -1,12 +1,17 @@
-name: Sync WFM Data to Neon
+name: WFM Sync & Keep Alive
 
 on:
   push:
     branches:
       - main
+  schedule:
+    # Tourne toutes les 10 minutes, 24h/24 et 7j/7
+    - cron: '*/5 * * * *'
 
 jobs:
+  # Job 1 : L'injection des données (se déclenche quand vous poussez les fichiers)
   sync:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -26,3 +31,13 @@ jobs:
         env:
           NEON_CONN_STRING: ${{ secrets.NEON_CONN_STRING }}
         run: python transform_inject.py
+
+  # Job 2 : Le Keep-Alive (se déclenche toutes les 10 minutes via le cron)
+  keep-alive:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Vercel API
+        run: |
+          echo "Réveil de l'API Vercel et Neon..."
+          curl -s -o /dev/null -w "Statut HTTP: %{http_code}\n" https://wfm-dashboard-three.vercel.app/api/health
