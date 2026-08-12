@@ -80,7 +80,8 @@ def preparer_data_erec():
     for col in ['Start time', 'Stop time']:
         if col in df_final.columns:
             df_final[col] = df_final[col].apply(parse_time)
-            df_final[col] = df_final[col].fillna(None)
+            df_final[col] = df_final[col].astype(object)
+            df_final[col] = df_final[col].where(pd.notna(df_final[col]), None)
     df_final['is_fim'] = False
     df_final = df_final.dropna(subset=['Date'])
     logger.info(f"[EREC] Nombre de lignes préparées : {len(df_final)}")
@@ -109,7 +110,8 @@ def preparer_data_nice():
     for col in ["Debut_shift", "Fin_shift", "Debut_activite", "Fin_Activite"]:
         if col in df_final.columns:
             df_final[col] = df_final[col].apply(parse_time)
-            df_final[col] = df_final[col].fillna(None)
+            df_final[col] = df_final[col].astype(object)
+            df_final[col] = df_final[col].where(pd.notna(df_final[col]), None)
     df_final = df_final[[c for c in ['Projet', 'Nice_ID', 'Agent', 'Date', 'Debut_shift', 'Fin_shift', 'Activite', 'Debut_activite', 'Fin_Activite'] if c in df_final.columns]].dropna(subset=['Date'])
     logger.info(f"[NICE] Nombre de lignes préparées : {len(df_final)}")
     return df_final
