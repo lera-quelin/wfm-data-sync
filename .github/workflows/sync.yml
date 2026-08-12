@@ -8,6 +8,10 @@ on:
     # Toutes les 5 minutes, de 6h à 19h UTC (9h à 22h heure de Madagascar)
     - cron: '*/5 6-19 * * *'
 
+concurrency:
+  group: wfm-sync-group
+  cancel-in-progress: true
+
 jobs:
   # Job 1 : L'injection des données (se déclenche quand vous poussez les fichiers)
   sync:
