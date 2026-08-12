@@ -23,7 +23,7 @@ DOSSIER_DESTINATION = "erec_data"
 DOSSIER_NICE = "nice_data"
 
 def parse_excel_date(valeur):
-    if valeur is None or valeur == '': return None
+    if valeur is None or pd.isna(valeur) or valeur == '': return None
     if isinstance(valeur, float) and math.isnan(valeur): return None
     if isinstance(valeur, (int, float)):
         try: return (datetime(1899, 12, 30) + timedelta(days=valeur)).strftime('%Y-%m-%d')
@@ -35,7 +35,7 @@ def parse_excel_date(valeur):
     return None
 
 def parse_time(valeur):
-    if valeur is None or valeur == '': return None
+    if valeur is None or pd.isna(valeur) or valeur == '': return None
     if isinstance(valeur, float) and math.isnan(valeur): return None
     if isinstance(valeur, (int, float)):
         try:
@@ -79,7 +79,8 @@ def preparer_data_erec():
     df_final = df_final[[c for c in mapping.keys() if c in df_final.columns]].rename(columns=mapping)
     for col in ['Start time', 'Stop time']:
         if col in df_final.columns:
-            df_final[col] = df_final[col].apply(parse_time).where(pd.notnull(df_final[col]), None).astype(object).replace(['NaN', 'nan'], None)
+            df_final[col] = df_final[col].apply(parse_time)
+            df_final[col] = df_final[col].fillna(None)
     df_final['is_fim'] = False
     df_final = df_final.dropna(subset=['Date'])
     logger.info(f"[EREC] Nombre de lignes préparées : {len(df_final)}")
@@ -107,7 +108,8 @@ def preparer_data_nice():
     df_final['Date'] = pd.to_datetime(df_final['Date'], dayfirst=True, errors='coerce').dt.date.astype(str)
     for col in ["Debut_shift", "Fin_shift", "Debut_activite", "Fin_Activite"]:
         if col in df_final.columns:
-            df_final[col] = df_final[col].apply(parse_time).where(pd.notnull(df_final[col]), None).astype(object).replace(['NaN', 'nan'], None)
+            df_final[col] = df_final[col].apply(parse_time)
+            df_final[col] = df_final[col].fillna(None)
     df_final = df_final[[c for c in ['Projet', 'Nice_ID', 'Agent', 'Date', 'Debut_shift', 'Fin_shift', 'Activite', 'Debut_activite', 'Fin_Activite'] if c in df_final.columns]].dropna(subset=['Date'])
     logger.info(f"[NICE] Nombre de lignes préparées : {len(df_final)}")
     return df_final
@@ -120,9 +122,14 @@ def inject_dataframe(conn, df, table_name, conflict_columns=None, replace_keys=N
     cols = [c for c in df.columns if c in existing_cols]
     if not cols: return 0
     df_clean = df[cols].copy()
+    
     if conflict_columns:
         conflict_cols_exist = [col for col in conflict_columns if col in df_clean.columns]
-        if conflict_cols_exist: df_clean = df_clean.drop_duplicates(subset=conflict_cols_exist, keep='last')
+        if conflict_cols_exist:
+            df_clean = df_clean.drop_duplicates(subset=conflict_cols_exist, keep='last')
+            # Trier les données pour éviter les deadlocks PostgreSQL
+            df_clean = df_clean.sort_values(by=conflict_cols_exist)
+            
     if replace_keys:
         replace_keys_exist = [k for k in replace_keys if k in df_clean.columns]
         if replace_keys_exist:
@@ -136,6 +143,7 @@ def inject_dataframe(conn, df, table_name, conflict_columns=None, replace_keys=N
                 with conn.cursor() as cur:
                     execute_values(cur, delete_stmt, pairs, page_size=1000)
                     logger.info(f"Table {table_name}: suppression effectuée pour {len(pairs)} couple(s) avant réinjection.")
+                    
     df_clean = df_clean.astype(object)
     data = [tuple(None if pd.isna(v) else v for v in row) for row in df_clean.to_records(index=False)]
     quoted_cols = [sql.Identifier(col) for col in cols]
