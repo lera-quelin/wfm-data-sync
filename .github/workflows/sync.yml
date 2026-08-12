@@ -6,7 +6,7 @@ on:
       - main
   schedule:
     # Tourne toutes les 10 minutes, 24h/24 et 7j/7
-    - cron: '*/5 * * * *'
+    - cron: '*/15 2-23 * * *'
 
 jobs:
   # Job 1 : L'injection des données (se déclenche quand vous poussez les fichiers)
