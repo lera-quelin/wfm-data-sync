@@ -10,7 +10,7 @@ on:
 
 concurrency:
   group: wfm-sync-group
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   # Job 1 : L'injection des données (se déclenche quand vous poussez les fichiers)
