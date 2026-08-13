@@ -1,9 +1,10 @@
-name: WFM Cloud VPN Sync & Keep Alive
+name: WFM Sync & Keep Alive
+
 on:
   push:
     branches:
       - main
-  workflow_dispatch:
+  workflow_dispatch: # Permet à votre script local de le déclencher
   schedule:
     # Toutes les 5 minutes, de 5h à 20h UTC (8h à 23h heure de Madagascar)
     - cron: '*/5 5-20 * * *'
@@ -14,10 +15,11 @@ concurrency:
 
 jobs:
   # =========================================================
-  # Job 1 : Synchronisation via VPN 
-  # (Se connecte au réseau interne, télécharge Erec, injecte dans Neon, et sauvegarde sur GitHub)
+  # Job 1 : L'injection des données 
+  # (Se déclenche quand le script local pousse les données ou manuellement)
   # =========================================================
   sync:
+    if: github.event_name != 'schedule' # Ne pas lancer l'injection pendant les pings du cron
     runs-on: ubuntu-latest
     steps:
       - name: 1. Checkout du code public (le script Python)
@@ -30,45 +32,20 @@ jobs:
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           path: ./data_extractions
 
-      - name: 3. Installation du client VPN Cisco (OpenConnect)
-        run: sudo apt-get update && sudo apt-get install -y openconnect
-
-      - name: 4. Connexion au VPN Concentrix
-        run: |
-          echo "Connexion au VPN Concentrix..."
-          echo "${{ secrets.VPN_PASSWORD }}" | sudo openconnect --background --user="${{ secrets.VPN_USERNAME }}" --usergroup="FR-SBL-CONCENTRIX-ANYCONNECT" --useragent="AnyConnect" --passwd-on-stdin ${{ secrets.VPN_ADDRESS }}
-          sleep 10
-
-      - name: 5. Configuration de Python
+      - name: 3. Configuration de Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: 6. Installation des dépendances Python
+      - name: 4. Installation des dépendances Python
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: 7. Exécution du script Cloud (Téléchargement Erec + Injection Neon)
+      - name: 5. Exécution du script d'injection (transform_inject.py)
         env:
           NEON_CONN_STRING: ${{ secrets.NEON_CONN_STRING }}
-          EREC_USERNAME: ${{ secrets.EREC_USERNAME }}
-          EREC_PASSWORD: ${{ secrets.EREC_PASSWORD }}
-        run: python cloud_sync.py
-
-      - name: 8. Déconnexion du VPN
-        if: always() # S'exécute même si le script précédent échoue
-        run: sudo killall openconnect || true
-
-      - name: 9. Sauvegarde des fichiers EREC dans le dépôt privé
-        run: |
-          cd data_extractions
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git remote set-url origin https://x-access-token:${{ secrets.PRIVATE_REPO_TOKEN }}@github.com/lera-quelin/data_extractions.git
-          git add .
-          git commit -m "Auto sync EREC $(date)" || echo "No changes to commit"
-          git push
+        run: python transform_inject.py
 
   # =========================================================
   # Job 2 : Le Keep-Alive 
