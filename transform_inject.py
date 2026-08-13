@@ -19,8 +19,8 @@ logger = logging.getLogger(__name__)
 
 # Configuration Cloud
 NEON_CONN_STRING = os.environ.get("NEON_CONN_STRING")
-DOSSIER_DESTINATION = "erec_data"
-DOSSIER_NICE = "nice_data"
+DOSSIER_DESTINATION = "data_extractions/erec_data"
+DOSSIER_NICE = "data_extractions/nice_data"
 
 def parse_excel_date(valeur):
     if valeur is None or pd.isna(valeur) or valeur == '': return None
