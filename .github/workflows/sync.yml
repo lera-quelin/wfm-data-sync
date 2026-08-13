@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
   schedule:
     # Toutes les 5 minutes, de 6h à 19h UTC (9h à 22h heure de Madagascar)
     - cron: '*/5 6-19 * * *'
