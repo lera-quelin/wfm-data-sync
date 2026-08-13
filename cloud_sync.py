@@ -21,9 +21,9 @@ logger = logging.getLogger(__name__)
 # Config Cloud
 NEON_CONN_STRING = os.environ.get("NEON_CONN_STRING")
 
-# Config Entreprise (Lue depuis les Secrets GitHub)
-MON_ID = os.environ.get("eRec_USERNAME")
-MON_MDP = os.environ.get("eRec_PASSWORD")
+# Config Entreprise
+MON_ID = os.environ.get("EREC_USERNAME")
+MON_MDP = os.environ.get("EREC_PASSWORD")
 REPORT_URL = "http://10.253.68.142:801/Reports.aspx"
 FAUX_DNA = "0,3.1,0,0,0,1914395348,0,-1,-1,0,-1,-1,0,-1,-1,0,-1,-1,1,0,0,1,1,1,97852684,1,1,0,0,0,1,1920,1080,2,0,145,0,128858925"
 FAUX_DEVICE_ID = "128858925"
@@ -50,9 +50,9 @@ LISTE_PROJETS = {
     "1183": "Zalando_SC"
 }
 
-# Dossiers temporaires
-DOSSIER_DESTINATION = "/tmp/erec_data"
-DOSSIER_NICE = "/tmp/nice_data"
+# Dossiers du dépôt privé cloné
+DOSSIER_DESTINATION = "data_extractions/erec_data"
+DOSSIER_NICE = "data_extractions/nice_data"
 
 def get_asp_tokens(html):
     def extract(pattern):
