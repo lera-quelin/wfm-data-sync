@@ -1,53 +1,84 @@
-name: WFM Sync & Keep Alive
+name: WFM Cloud VPN Sync & Keep Alive
 on:
   push:
     branches:
       - main
   workflow_dispatch:
   schedule:
-    # Toutes les 5 minutes, de 6h à 19h UTC (9h à 22h heure de Madagascar)
-    - cron: '*/5 6-19 * * *'
+    # Toutes les 5 minutes, de 5h à 20h UTC (8h à 23h heure de Madagascar)
+    - cron: '*/5 5-20 * * *'
 
 concurrency:
   group: wfm-sync-group
   cancel-in-progress: false
-  
+
 jobs:
-  # Job 1 : L'injection des données (se déclenche quand vous poussez les fichiers)
+  # =========================================================
+  # Job 1 : Synchronisation via VPN 
+  # (Se connecte au réseau interne, télécharge Erec, injecte dans Neon, et sauvegarde sur GitHub)
+  # =========================================================
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout du code public (le script Python)
+      - name: 1. Checkout du code public (le script Python)
         uses: actions/checkout@v4
 
-      - name: Checkout des données privées
+      - name: 2. Checkout des données privées (data_extractions)
         uses: actions/checkout@v4
         with:
           repository: lera-quelin/data_extractions
           token: ${{ secrets.PRIVATE_REPO_TOKEN }}
           path: ./data_extractions
 
-      - name: Set up Python
+      - name: 3. Installation du client VPN Cisco (OpenConnect)
+        run: sudo apt-get update && sudo apt-get install -y openconnect
+
+      - name: 4. Connexion au VPN Concentrix
+        run: |
+          echo "Connexion au VPN Concentrix..."
+          echo "${{ secrets.VPN_PASSWORD }}" | sudo openconnect --background --user="${{ secrets.VPN_USERNAME }}" --passwd-on-stdin ${{ secrets.VPN_ADDRESS }}
+          sleep 10 # Laisse 10 secondes au VPN pour établir la connexion
+
+      - name: 5. Configuration de Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: 6. Installation des dépendances Python
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Injection Script
+      - name: 7. Exécution du script Cloud (Téléchargement Erec + Injection Neon)
         env:
           NEON_CONN_STRING: ${{ secrets.NEON_CONN_STRING }}
-        run: python transform_inject.py
+          EREC_USERNAME: ${{ secrets.EREC_USERNAME }}
+          EREC_PASSWORD: ${{ secrets.EREC_PASSWORD }}
+        run: python cloud_sync.py
 
-  # Job 2 : Le Keep-Alive (se déclenche toutes les 10 minutes via le cron)
+      - name: 8. Déconnexion du VPN
+        if: always() # S'exécute même si le script précédent échoue
+        run: sudo killall openconnect || true
+
+      - name: 9. Sauvegarde des fichiers EREC dans le dépôt privé
+        run: |
+          cd data_extractions
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git remote set-url origin https://x-access-token:${{ secrets.PRIVATE_REPO_TOKEN }}@github.com/lera-quelin/data_extractions.git
+          git add .
+          git commit -m "Auto sync EREC $(date)" || echo "No changes to commit"
+          git push
+
+  # =========================================================
+  # Job 2 : Le Keep-Alive 
+  # (Garde Vercel et Neon éveillés, se déclenche uniquement via le cron)
+  # =========================================================
   keep-alive:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Vercel API
+      - name: Ping de l'API Vercel
         run: |
           echo "Réveil de l'API Vercel et Neon..."
           curl -s -o /dev/null -w "Statut HTTP: %{http_code}\n" https://wfm-dashboard-three.vercel.app/api/health
