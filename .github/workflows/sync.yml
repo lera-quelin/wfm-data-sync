@@ -36,8 +36,8 @@ jobs:
       - name: 4. Connexion au VPN Concentrix
         run: |
           echo "Connexion au VPN Concentrix..."
-          echo "${{ secrets.VPN_PASSWORD }}" | sudo openconnect --background --user="${{ secrets.VPN_USERNAME }}" --usergroup="FR-SBL-CONCENTRIX-ANYCONNECT" --passwd-on-stdin ${{ secrets.VPN_ADDRESS }}
-          sleep 10 # Laisse 10 secondes au VPN pour établir la connexion
+          echo "${{ secrets.VPN_PASSWORD }}" | sudo openconnect --background --user="${{ secrets.VPN_USERNAME }}" --usergroup="FR-SBL-CONCENTRIX-ANYCONNECT" --useragent="AnyConnect" --passwd-on-stdin ${{ secrets.VPN_ADDRESS }}
+          sleep 10
 
       - name: 5. Configuration de Python
         uses: actions/setup-python@v5
