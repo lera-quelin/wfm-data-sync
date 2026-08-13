@@ -1,5 +1,4 @@
 name: WFM Sync & Keep Alive
-
 on:
   push:
     branches:
@@ -11,15 +10,21 @@ on:
 concurrency:
   group: wfm-sync-group
   cancel-in-progress: false
-
+  
 jobs:
   # Job 1 : L'injection des données (se déclenche quand vous poussez les fichiers)
   sync:
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout du code public (le script Python)
         uses: actions/checkout@v4
+
+      - name: Checkout des données privées
+        uses: actions/checkout@v4
+        with:
+          repository: lera-quelin/data_extractions
+          token: ${{ secrets.PRIVATE_REPO_TOKEN }}
+          path: ./data_extractions
 
       - name: Set up Python
         uses: actions/setup-python@v5
