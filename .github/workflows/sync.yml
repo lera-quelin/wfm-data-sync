@@ -5,9 +5,9 @@ on:
     branches:
       - main
   workflow_dispatch: # Permet à votre script local de le déclencher
-  schedule:
+  # schedule:
     # Toutes les 5 minutes, de 5h à 20h UTC (8h à 23h heure de Madagascar)
-    - cron: '*/5 5-20 * * *'
+    # - cron: '*/5 5-20 * * *'
 
 concurrency:
   group: wfm-sync-group
