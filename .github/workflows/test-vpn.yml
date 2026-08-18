@@ -12,8 +12,8 @@ jobs:
 
       - name: Tester l'authentification VPN
         env:
-          VPN_USER: ${{ secrets.VPN_USER }}
-          VPN_PASS: ${{ secrets.VPN_PASS }}
+          VPN_USER: ${{ secrets.VPN_USERNAME }}
+          VPN_PASS: ${{ secrets.VPN_PASSWORD }}
           VPN_GROUP: ${{ secrets.VPN_GROUP }}
         run: |
           echo "Tentative de connexion au VPN avec le groupe $VPN_GROUP..."
