@@ -1,4 +1,4 @@
-name: Test Connexion VPN Webhelp (Playwright SSO)
+name: Test Connexion VPN Webhelp (Selenium + SSO)
 
 on:
   workflow_dispatch: # Lancement manuel
@@ -12,98 +12,155 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Installer OpenConnect et Playwright
+      - name: Installer OpenConnect et Selenium
         run: |
-          sudo apt-get update && sudo apt-get install -y openconnect
-          pip install playwright
-          playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y openconnect
+          pip install selenium
 
-      - name: Authentification SSO et Test VPN
+      - name: Authentification SSO, Extraction Cookie et Test VPN
         env:
           VPN_USER: ${{ secrets.VPN_USERNAME }}
           VPN_PASS: ${{ secrets.VPN_PASSWORD }}
-          VPN_GROUP: ${{ secrets.VPN_GROUP }}
+          VPN_GROUP: ${{ secrets.VPN_GROUP }} # Optionnel dans vos secrets
         run: |
-          python3 -c '
-          import os, sys, time, subprocess
-          from playwright.sync_api import sync_playwright
+          cat << 'EOF' > vpn_test.py
+          import os
+          import sys
+          import time
+          import subprocess
+          from selenium import webdriver
+          from selenium.webdriver.chrome.options import Options as ChromeOptions
+          from selenium.webdriver.common.by import By
+          from selenium.webdriver.support.ui import WebDriverWait
+          from selenium.webdriver.support import expected_conditions as EC
 
+          # ==========================================
+          # 1. UTILITAIRES SELENIUM
+          # ==========================================
+          def initialiser_driver():
+              options = ChromeOptions()
+              options.add_argument("--headless=new")
+              options.add_argument("--no-sandbox")
+              options.add_argument("--disable-dev-shm-usage")
+              options.add_argument("--window-size=1920,1080")
+              options.add_argument("--log-level=3")
+              return webdriver.Chrome(options=options)
+
+          def attendre_et_cliquer(driver, xpath, timeout=10, optionnel=False):
+              try:
+                  element = WebDriverWait(driver, timeout).until(
+                      EC.element_to_be_clickable((By.XPATH, xpath))
+                  )
+                  driver.execute_script("arguments[0].scrollIntoView(true);", element)
+                  element.click()
+                  return True
+              except Exception:
+                  if not optionnel:
+                      print(f"⚠️ Clic impossible sur [{xpath}]")
+                  return False
+
+          def attendre_et_ecrire(driver, xpath, texte, timeout=10):
+              try:
+                  element = WebDriverWait(driver, timeout).until(
+                      EC.presence_of_element_located((By.XPATH, xpath))
+                  )
+                  element.clear()
+                  element.send_keys(texte)
+                  return True
+              except Exception:
+                  print(f"⚠️ Écriture impossible sur [{xpath}]")
+                  return False
+
+          # ==========================================
+          # 2. LOGIQUE DE CONNEXION
+          # ==========================================
           user = os.environ.get("VPN_USER")
           password = os.environ.get("VPN_PASS")
           group = os.environ.get("VPN_GROUP", "FR-SAML-ANYCONNECT-MFA")
 
+          if not user or not password:
+              print("❌ ERREUR: Les identifiants (Secrets) sont manquants !")
+              sys.exit(1)
+
           login_url = f"https://vpn.webhelp.fr/+CSCOE+/saml/sp/login?groupname={group}"
+          print(f"[1/4] Lancement du navigateur pour : {user}")
+          driver = initialiser_driver()
 
-          print(f"[1/4] Lancement du navigateur Headless pour : {user}")
+          try:
+              print(f"-> Navigation vers {login_url}")
+              driver.get(login_url)
+              time.sleep(2) # Laisse l'URL de redirection SSO s'établir
 
-          with sync_playwright() as p:
-              browser = p.chromium.launch(headless=True)
-              context = browser.new_context()
-              page = context.new_page()
-
-              # 1. Navigation vers l URL SAML du VPN
-              print("-> Navigation vers la page de login...")
-              page.goto(login_url)
-              page.wait_for_load_state("networkidle")
-
-              # 2. Authentification Concentrix (en imitant ton script Selenium)
               print("[2/4] Saisie des identifiants Concentrix...")
               
-              # Étape A : Clic sur "Concentrix Authentication" si présent
-              if page.is_visible("text=Concentrix Authentication"):
-                  print("   -> Clic sur Concentrix Authentication")
-                  page.click("text=Concentrix Authentication")
-                  page.wait_for_timeout(4000)
+              # Étape A : Clic sur "Concentrix Authentication" (Optionnel, timeout court)
+              if attendre_et_cliquer(driver, "//*[contains(text(), 'Concentrix Authentication')]", timeout=4, optionnel=True):
+                  print("   -> Clic sur Concentrix Authentication réussi.")
+                  time.sleep(2)
 
-              # Étape B : Saisie de l email
-              if page.is_visible("#username"):
-                  print("   -> Saisie de l username")
-                  page.fill("#username", user)
-                  page.click("button[type=submit]") # Bouton Next
-                  page.wait_for_timeout(4000)
-
-              # Étape C : Clic sur "Login with Password" (LE SECRET POUR CONTOURNER LE MFA !)
-              if page.is_visible("text=Login with Password"):
-                  print("   -> Clic sur Login with Password (Contournement MFA)")
-                  page.click("text=Login with Password")
-                  page.wait_for_timeout(3000)
-              elif page.is_visible("text=Password"):
-                  print("   -> Clic sur Password")
-                  page.click("text=Password")
-                  page.wait_for_timeout(3000)
+              # Étape B : Saisie de l'email
+              xpath_user = "//input[@id='username' or @type='email' or contains(@name, 'login')]"
+              if attendre_et_ecrire(driver, xpath_user, user):
+                  print("   -> Saisie de l'username")
+                  attendre_et_cliquer(driver, "//button[@type='submit' or contains(., 'Next') or contains(., 'Suivant')]")
+              
+              # Étape C : Contournement MFA (Login with Password)
+              xpath_bypass = "//*[contains(text(), 'Login with Password') or contains(text(), 'Password')]"
+              if attendre_et_cliquer(driver, xpath_bypass, timeout=5, optionnel=True):
+                  print("   -> Clic sur 'Login with Password' (Contournement MFA) réussi.")
 
               # Étape D : Saisie du mot de passe
-              if page.is_visible("input[type=password]"):
+              xpath_pass = "//input[@type='password']"
+              if attendre_et_ecrire(driver, xpath_pass, password):
                   print("   -> Saisie du mot de passe")
-                  page.fill("input[type=password]", password)
-                  page.click("button[type=submit]") # Bouton Submit
-                  page.wait_for_timeout(5000)
+                  attendre_et_cliquer(driver, "//button[@type='submit' or contains(., 'Sign In') or contains(., 'Verify')]")
+              
+              # Attente que la connexion se finalise et pose le cookie
+              time.sleep(5)
 
-              # 3. Extraction du Cookie webvpn
-              cookies = context.cookies()
-              webvpn_cookie = next((c["value"] for c in cookies if c["name"] == "webvpn"), None)
-
-              if not webvpn_cookie:
-                  print("❌ Échec : Impossible de récupérer le cookie webvpn.")
-                  # Sauvegarde une capture d écran pour debuguer si ça échoue
-                  page.screenshot(path="debug_screenshot.png")
-                  print("Capture d ecran sauvegardée dans debug_screenshot.png")
+              # ==========================================
+              # 3. EXTRACTION DU COOKIE WEBVPN
+              # ==========================================
+              print("[3/4] Recherche du cookie webvpn...")
+              cookie_obj = driver.get_cookie("webvpn")
+              
+              if not cookie_obj:
+                  print("❌ Échec : Impossible de récupérer le cookie 'webvpn'.")
+                  driver.save_screenshot("debug_screenshot.png")
+                  print("Capture d'écran sauvegardée sous 'debug_screenshot.png'")
+                  driver.quit()
                   sys.exit(1)
 
+              webvpn_cookie = cookie_obj["value"]
               print("✅ Cookie webvpn extrait avec succès !")
+              driver.quit() # On peut fermer le navigateur, on a ce qu'il nous faut
 
-              # 4. Test d authentification OpenConnect avec le cookie
-              print("[3/4] Test d authentification OpenConnect...")
-              cmd = f"echo \"{webvpn_cookie}\" | sudo openconnect --protocol=anyconnect --cookie-on-stdin --authenticate vpn.webhelp.fr"
-              res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+              # ==========================================
+              # 4. TEST OPENCONNECT
+              # ==========================================
+              print("[4/4] Test d'authentification OpenConnect...")
+              cmd = f"echo '{webvpn_cookie}' | sudo openconnect --protocol=anyconnect --cookie-on-stdin --authenticate vpn.webhelp.fr"
               
+              res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
               print(res.stdout)
+              
               if res.returncode != 0:
-                  print("Erreur OpenConnect:", res.stderr)
+                  print("❌ Erreur OpenConnect:", res.stderr)
                   sys.exit(res.returncode)
               else:
-                  print("🎉 Connexion VPN validée avec succès !")
-          '
+                  print("🎉 Connexion VPN validée avec succès par OpenConnect !")
+                  sys.exit(0)
+
+          except Exception as e:
+              print(f"❌ [ERREUR CRITIQUE] {e}")
+              driver.save_screenshot("debug_screenshot.png")
+              driver.quit()
+              sys.exit(1)
+          EOF
+
+          # Exécution du script généré
+          python vpn_test.py
 
       - name: Upload Screenshot si échec
         if: failure()
