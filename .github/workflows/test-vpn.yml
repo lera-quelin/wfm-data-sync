@@ -22,7 +22,7 @@ jobs:
         env:
           VPN_USER: ${{ secrets.VPN_USERNAME }}
           VPN_PASS: ${{ secrets.VPN_PASSWORD }}
-          VPN_GROUP: ${{ secrets.VPN_GROUP }} # Optionnel dans vos secrets
+          VPN_GROUP: ${{ secrets.VPN_GROUP }}
         run: |
           cat << 'EOF' > vpn_test.py
           import os
@@ -39,12 +39,15 @@ jobs:
           # 1. UTILITAIRES SELENIUM
           # ==========================================
           def initialiser_driver():
+              # ON UTILISE CHROME ICI CAR GITHUB ACTIONS N'A PAS EDGE
               options = ChromeOptions()
               options.add_argument("--headless=new")
               options.add_argument("--no-sandbox")
               options.add_argument("--disable-dev-shm-usage")
               options.add_argument("--window-size=1920,1080")
               options.add_argument("--log-level=3")
+              # Options pour simuler un vrai navigateur et éviter les détections de bot
+              options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
               return webdriver.Chrome(options=options)
 
           def attendre_et_cliquer(driver, xpath, timeout=10, optionnel=False):
@@ -84,17 +87,17 @@ jobs:
               sys.exit(1)
 
           login_url = f"https://vpn.webhelp.fr/+CSCOE+/saml/sp/login?groupname={group}"
-          print(f"[1/4] Lancement du navigateur pour : {user}")
+          print(f"[1/4] Lancement du navigateur Chrome pour : {user}")
           driver = initialiser_driver()
 
           try:
               print(f"-> Navigation vers {login_url}")
               driver.get(login_url)
-              time.sleep(2) # Laisse l'URL de redirection SSO s'établir
+              time.sleep(3) # Laisse l'URL de redirection SSO s'établir
 
               print("[2/4] Saisie des identifiants Concentrix...")
               
-              # Étape A : Clic sur "Concentrix Authentication" (Optionnel, timeout court)
+              # Étape A : Clic sur "Concentrix Authentication" (Optionnel)
               if attendre_et_cliquer(driver, "//*[contains(text(), 'Concentrix Authentication')]", timeout=4, optionnel=True):
                   print("   -> Clic sur Concentrix Authentication réussi.")
                   time.sleep(2)
@@ -117,7 +120,7 @@ jobs:
                   attendre_et_cliquer(driver, "//button[@type='submit' or contains(., 'Sign In') or contains(., 'Verify')]")
               
               # Attente que la connexion se finalise et pose le cookie
-              time.sleep(5)
+              time.sleep(6)
 
               # ==========================================
               # 3. EXTRACTION DU COOKIE WEBVPN
