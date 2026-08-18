@@ -1,4 +1,4 @@
-name: Test Connexion VPN Webhelp (Playwright SSO)
+name: Connexion VPN avec Selenium
 
 on:
   workflow_dispatch: # Lancement manuel
@@ -7,101 +7,27 @@ jobs:
   test-vpn:
     runs-on: ubuntu-latest
     steps:
+      # 1. On récupère le code de votre dépôt (pour avoir accès à vpn_login.py)
+      - name: Récupérer le code
+        uses: actions/checkout@v4
+
+      # 2. On installe Python sur le serveur GitHub
       - name: Configuration Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Installer OpenConnect et Playwright
+      # 3. On installe Selenium, OpenConnect et les pré-requis
+      - name: Installer les dépendances
         run: |
-          sudo apt-get update && sudo apt-get install -y openconnect
-          pip install playwright pyotp
-          playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y openconnect
+          pip install selenium webdriver-manager
 
-      - name: Authentification SSO et Test VPN
+      # 4. On lance votre script Python !
+      - name: Exécuter le script de connexion Selenium
         env:
           VPN_USER: ${{ secrets.VPN_USERNAME }}
           VPN_PASS: ${{ secrets.VPN_PASSWORD }}
-          VPN_GROUP: ${{ secrets.VPN_GROUP }}
-          VPN_TOTP_SECRET: ${{ secrets.VPN_TOTP_SECRET }} # Optionnel (si TOTP à 6 chiffres)
         run: |
-          python3 -c '
-          import os, sys, time, subprocess
-          from playwright.sync_api import sync_playwright
-
-          user = os.environ.get("VPN_USER")
-          password = os.environ.get("VPN_PASS")
-          group = os.environ.get("VPN_GROUP", "FR-SAML-ANYCONNECT-MFA")
-          totp_secret = os.environ.get("VPN_TOTP_SECRET")
-
-          login_url = f"https://vpn.webhelp.fr/+CSCOE+/saml/sp/login?groupname={group}"
-
-          print(f"[1/4] Lancement du navigateur Headless pour : {user}")
-
-          with sync_playwright() as p:
-              browser = p.chromium.launch(headless=True)
-              context = browser.new_context()
-              page = context.new_page()
-
-              # 1. Navigation vers l URL SAML du VPN
-              page.goto(login_url)
-              page.wait_for_load_state("networkidle")
-
-              # 2. Remplissage Identifiant SSO (Microsoft / Identité)
-              print("[2/4] Saisie des identifiants SSO...")
-              if page.is_visible("input[type=\"email\"]"):
-                  page.fill("input[type=\"email\"]", user)
-                  page.click("input[type=\"submit\"]")
-                  page.wait_for_timeout(2000)
-
-              # 3. Remplissage Mot de passe
-              if page.is_visible("input[type=\"password\"]"):
-                  page.fill("input[type=\"password\"]", password)
-                  page.click("input[type=\"submit\"]")
-                  page.wait_for_timeout(3000)
-
-              # 4. Gestion du MFA (TOTP automatique ou validation mobile Push)
-              if totp_secret:
-                  import pyotp
-                  totp = pyotp.TOTP(totp_secret).now()
-                  print(f"[MFA] Code TOTP généré : {totp}")
-                  if page.is_visible("input[type=\"tel\"]") or page.is_visible("input[name=\"otcc\"]"):
-                      page.fill("input[type=\"tel\"]", totp)
-                      page.click("input[type=\"submit\"]")
-              else:
-                  print("[MFA] ATTENTION : Approuvez la notification Push sur votre téléphone (fenêtre de 60s)...")
-                  for _ in range(12):
-                      time.sleep(5)
-                      cookies = [c["name"] for c in context.cookies()]
-                      if "webvpn" in cookies:
-                          print("[MFA] Validation détectée !")
-                          break
-
-              # Validation éventuelle du bouton "Rester connecté ?"
-              if page.is_visible("#idSIButton9"):
-                  page.click("#idSIButton9")
-
-              time.sleep(5)
-
-              # 5. Extraction du Cookie webvpn
-              cookies = context.cookies()
-              webvpn_cookie = next((c["value"] for c in cookies if c["name"] == "webvpn"), None)
-
-              if not webvpn_cookie:
-                  print("❌ Échec : Impossible de récupérer le cookie webvpn (MFA non validé ou identifiants incorrects).")
-                  sys.exit(1)
-
-              print("✅ Cookie webvpn extrait avec succès !")
-
-              # 6. Test d authentification OpenConnect avec le cookie
-              print("[3/4] Test d authentification OpenConnect...")
-              cmd = f"echo \"{webvpn_cookie}\" | sudo openconnect --protocol=anyconnect --cookie-on-stdin --authenticate vpn.webhelp.fr"
-              res = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-              
-              print(res.stdout)
-              if res.returncode != 0:
-                  print("Erreur OpenConnect:", res.stderr)
-                  sys.exit(res.returncode)
-              else:
-                  print("🎉 Connexion VPN validée avec succès !")
-          '
+          python vpn_login.py
